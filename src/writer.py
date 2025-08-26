@@ -17,76 +17,102 @@ def get_metadata(
     original_title: str, original_author: str, output_dir: str
 ) -> Tuple[str, str, str]:
     """
-    Fetches book metadata from Google Books API.
+    Fetches book metadata from various sources.
+    Tries longitood.com API first, then Google Books API, then a placeholder.
     Returns (title, author, cover_path).
     """
-    query = f"intitle:{urllib.parse.quote_plus(original_title)}"
-    if original_author:
-        query += f"+inauthor:{urllib.parse.quote_plus(original_author)}"
+    cover_url = None
 
-    url = f"https://www.googleapis.com/books/v1/volumes?q={query}"
+    # 1. Try longitood.com API if we have title and author
+    if original_title and original_author:
+        longitood_api_url = "https://bookcover.longitood.com/bookcover"
+        params = {
+            "book_title": original_title,
+            "author_name": original_author,
+        }
+        try:
+            response = requests.get(longitood_api_url, params=params)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("url"):
+                    cover_url = data["url"]
+            # Per instructions, 400 and 404 are not errors, but fallbacks
+            elif response.status_code not in [400, 404]:
+                response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            print(f"Error querying longitood API for '{original_title}': {e}")
+        except Exception as e:
+            print(f"Error processing response from longitood API for '{original_title}': {e}")
 
-    try:
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an exception for bad status codes
-        data = response.json()
+    # 2. Fallback to Google Books API if no cover found yet
+    if not cover_url:
+        query = f"intitle:{urllib.parse.quote_plus(original_title)}"
+        if original_author:
+            query += f"+inauthor:{urllib.parse.quote_plus(original_author)}"
 
-        if data.get("totalItems", 0) > 0:
-            for item in data["items"]:
-                volume_info = item.get("volumeInfo", {})
+        google_api_url = f"https://www.googleapis.com/books/v1/volumes?q={query}"
 
-                # title = volume_info.get("title", original_title)
-                # authors = volume_info.get(
-                #     "authors", [original_author] if original_author else []
-                # )
-                # author = ", ".join(authors)
+        try:
+            response = requests.get(google_api_url)
+            response.raise_for_status()
+            data = response.json()
 
-                image_links = volume_info.get("imageLinks", {})
-                cover_url = image_links.get("thumbnail")
+            if data.get("totalItems", 0) > 0:
+                for item in data["items"]:
+                    volume_info = item.get("volumeInfo", {})
+                    image_links = volume_info.get("imageLinks", {})
+                    if image_links.get("thumbnail"):
+                        cover_url = image_links.get("thumbnail")
+                        break  # Found a cover, stop looking
+        except requests.exceptions.RequestException as e:
+            print(f"Could not fetch metadata from Google Books for '{original_title}': {e}")
 
-                if cover_url:
-                    # Download cover
-                    _, ext = os.path.splitext(cover_url)
-                    if not ext:
-                        ext = ".jpg"
-                    cover_filename = sanitize_filename(
-                        f"{original_title} - {original_author}{ext}"
-                    )
-                    covers_dir = os.path.join(output_dir, "covers")
-                    cover_filepath = os.path.join(covers_dir, cover_filename)
-
-                    img_response = requests.get(cover_url, stream=True)
-                    if img_response.status_code == 200:
-                        with open(cover_filepath, "wb") as f:
-                            for chunk in img_response.iter_content(1024):
-                                f.write(chunk)
-
-                    cover_path = f"./covers/{cover_filename}"
-                    return original_title, original_author, cover_path
-
-    except requests.exceptions.RequestException as e:
-        print(f"Could not fetch metadata for '{original_title}': {e}")
-
-    # Fall through to placeholder if API fails or no cover is found
-    title = original_title
-    author = original_author
-    placeholder_url = "https://placehold.co/150x200.png?text=No%20Cover"
-    cover_filename = sanitize_filename(f"{title} - {author}.png")
+    # 3. Download the cover or use a placeholder
     covers_dir = os.path.join(output_dir, "covers")
+    os.makedirs(covers_dir, exist_ok=True)
+
+    # If we have a cover_url, try to download it.
+    if cover_url:
+        try:
+            # Determine file extension from URL
+            _, ext = os.path.splitext(urllib.parse.urlparse(cover_url).path)
+            if not ext or len(ext) > 5:  # Basic check for valid extension
+                ext = ".jpg"
+
+            cover_filename = sanitize_filename(f"{original_title} - {original_author}{ext}")
+            cover_filepath = os.path.join(covers_dir, cover_filename)
+
+            img_response = requests.get(cover_url, stream=True)
+            img_response.raise_for_status()
+
+            with open(cover_filepath, "wb") as f:
+                img_response.raw.decode_content = True
+                shutil.copyfileobj(img_response.raw, f)
+
+            cover_path = f"./covers/{cover_filename}"
+            return original_title, original_author, cover_path
+
+        except requests.exceptions.RequestException as e:
+            print(f"Could not download cover for '{original_title}': {e}")
+            # Fall through to placeholder if download fails
+
+    # Fallback to placeholder if no cover_url or if download failed
+    placeholder_url = "https://placehold.co/150x200.png?text=No%20Cover"
+    cover_filename = sanitize_filename(f"{original_title} - {original_author}.png")
     cover_filepath = os.path.join(covers_dir, cover_filename)
 
     try:
         if not os.path.exists(cover_filepath):
             img_response = requests.get(placeholder_url, stream=True)
-            if img_response.status_code == 200:
-                with open(cover_filepath, "wb") as f:
-                    img_response.raw.decode_content = True
-                    shutil.copyfileobj(img_response.raw, f)
+            img_response.raise_for_status()
+            with open(cover_filepath, "wb") as f:
+                img_response.raw.decode_content = True
+                shutil.copyfileobj(img_response.raw, f)
     except requests.exceptions.RequestException as e:
         print(f"Could not download placeholder image: {e}")
 
     cover_path = f"./covers/{cover_filename}"
-    return title, author, cover_path
+    return original_title, original_author, cover_path
 
 
 def generate_book_markdown(
