@@ -1,1 +1,1 @@
-# No dependencies yet
+requests==2.32.5
