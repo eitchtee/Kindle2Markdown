@@ -144,9 +144,6 @@ def get_metadata(
 
     first_author = original_authors[0] if original_authors else ""
     cover_url = _get_cover_url_from_longitood(original_title, first_author)
-    if not cover_url:
-        cover_url = _get_cover_url_from_google_books(original_title, first_author)
-
     if cover_url:
         cover_path = _download_cover(
             cover_url, original_title, original_authors, output_dir
@@ -154,6 +151,15 @@ def get_metadata(
         if cover_path:
             return original_title, original_authors, cover_path
 
+    cover_url = _get_cover_url_from_google_books(original_title, first_author)
+    if cover_url:
+        cover_path = _download_cover(
+            cover_url, original_title, original_authors, output_dir
+        )
+        if cover_path:
+            return original_title, original_authors, cover_path
+
+    # Fallback to placeholder
     cover_path = _download_placeholder_cover(
         original_title, original_authors, output_dir
     )
@@ -165,6 +171,7 @@ def generate_book_markdown(
     authors: List[str],
     clippings: List[Dict],
     cover_path: str,
+    date_format: str,
 ) -> str:
     """Generates the markdown content for a single book."""
     clippings.sort(key=lambda c: c.get("date") or datetime.min)
@@ -199,7 +206,7 @@ Last clipping: {last_clipping_date_str}
             if clipping.get("position"):
                 quote_title_parts.append(f"📑 {clipping['position']}")
         if clipping.get("date"):
-            quote_title_parts.append(f"@ {clipping['date'].strftime('%d/%m/%Y %H:%M')}")
+            quote_title_parts.append(f"@ {clipping['date'].strftime(date_format)}")
 
         quote_title = " ".join(quote_title_parts)
         highlight_lines = clipping["highlight"].split("\n")
@@ -211,10 +218,12 @@ Last clipping: {last_clipping_date_str}
 
 
 def write_markdown_files(
-    grouped_clippings: Dict, output_dir: str, rebuild: bool = False
+    grouped_clippings: Dict,
+    output_dir: str,
+    rebuild: bool = False,
+    date_format: str = "%d/%m/%Y %H:%M",
 ):
     """Writes the markdown files for all books."""
-    
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -248,7 +257,9 @@ def write_markdown_files(
         _, authors, cover_path = get_metadata(
             title, authors, output_dir, rebuild=rebuild
         )
-        markdown_content = generate_book_markdown(title, authors, clippings, cover_path)
+        markdown_content = generate_book_markdown(
+            title, authors, clippings, cover_path, date_format
+        )
 
         try:
             with open(filepath, "w", encoding="utf-8") as f:

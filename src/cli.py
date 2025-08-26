@@ -34,6 +34,11 @@ def main():
         action="store_true",
         help="Overwrite existing files and covers.",
     )
+    arg_parser.add_argument(
+        "--date-format",
+        default="%d/%m/%Y %H:%M",
+        help="The strftime format for the clipping date. Defaults to '%d/%m/%Y %H:%M'.",
+    )
 
     args = arg_parser.parse_args()
 
@@ -92,7 +97,12 @@ def main():
         grouped_clippings[book_key].append(clipping)
 
     # Write the markdown files
-    writer.write_markdown_files(grouped_clippings, args.output, rebuild=args.rebuild)
+    writer.write_markdown_files(
+        grouped_clippings,
+        args.output,
+        rebuild=args.rebuild,
+        date_format=args.date_format,
+    )
 
     print(
         f"\nSuccessfully processed {len(clippings)} clippings into {len(grouped_clippings)} books."
