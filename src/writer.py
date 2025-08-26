@@ -110,7 +110,7 @@ def _download_placeholder_cover(title: str, authors: List[str], output_dir: str)
 
     if not os.path.exists(cover_filepath):
         placeholder_text = f"{title}\n{authors_str}"
-        placeholder_url = f"https://placehold.co/450x600.png?text={placeholder_text}"
+        placeholder_url = f"https://placehold.co/450x600.png?text={urllib.parse.quote(placeholder_text)}"
         try:
             img_response = requests.get(placeholder_url, stream=True)
             img_response.raise_for_status()
@@ -127,6 +127,7 @@ def get_metadata(
     original_title: str,
     original_authors: List[str],
     output_dir: str,
+    rebuild: bool = False,
 ) -> Tuple[str, List[str], str]:
     """
     Fetches book metadata, prioritizing existing covers, then external APIs.
@@ -134,16 +135,18 @@ def get_metadata(
     """
     os.makedirs(os.path.join(output_dir, "covers"), exist_ok=True)
 
-    # 1. Check for an existing cover file
-    existing_cover = _find_existing_cover(original_title, original_authors, output_dir)
-    if existing_cover:
-        return original_title, original_authors, existing_cover
+    if not rebuild:
+        existing_cover = _find_existing_cover(
+            original_title, original_authors, output_dir
+        )
+        if existing_cover:
+            return original_title, original_authors, existing_cover
 
-    cover_path = None
-
-    # 2. Fetch cover URL from APIs
     first_author = original_authors[0] if original_authors else ""
     cover_url = _get_cover_url_from_longitood(original_title, first_author)
+    if not cover_url:
+        cover_url = _get_cover_url_from_google_books(original_title, first_author)
+
     if cover_url:
         cover_path = _download_cover(
             cover_url, original_title, original_authors, output_dir
@@ -151,15 +154,6 @@ def get_metadata(
         if cover_path:
             return original_title, original_authors, cover_path
 
-    cover_url = _get_cover_url_from_google_books(original_title, first_author)
-    if cover_url:
-        cover_path = _download_cover(
-            cover_url, original_title, original_authors, output_dir
-        )
-        if cover_path:
-            return original_title, original_authors, cover_path
-
-    # Fallback to placeholder
     cover_path = _download_placeholder_cover(
         original_title, original_authors, output_dir
     )
@@ -216,8 +210,12 @@ Last clipping: {last_clipping_date_str}
     return f"{header}\n{body}"
 
 
-def write_markdown_files(grouped_clippings: Dict, output_dir: str):
+def write_markdown_files(
+    grouped_clippings: Dict, output_dir: str, rebuild: bool = False
+):
     """Writes the markdown files for all books."""
+    
+
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
@@ -227,16 +225,34 @@ def write_markdown_files(grouped_clippings: Dict, output_dir: str):
 
     for (title, author_tuple), clippings in grouped_clippings.items():
         authors = list(author_tuple)
-        _, authors, cover_path = get_metadata(title, authors, output_dir)
-        markdown_content = generate_book_markdown(title, authors, clippings, cover_path)
-
         authors_str = "; ".join(authors)
         filename = sanitize_filename(f"{title} - {authors_str}.md")
         filepath = os.path.join(output_dir, filename)
 
+        if not rebuild and os.path.exists(filepath):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    existing_content = f.read()
+
+                match = re.search(r"Clippings: (\d+)", existing_content)
+                if match:
+                    existing_clippings_count = int(match.group(1))
+                    if existing_clippings_count == len(clippings):
+                        print(f"Skipping up-to-date file: {filename}")
+                        continue
+            except (IOError, ValueError) as e:
+                print(
+                    f"Could not check existing file {filename}, will overwrite. Error: {e}"
+                )
+
+        _, authors, cover_path = get_metadata(
+            title, authors, output_dir, rebuild=rebuild
+        )
+        markdown_content = generate_book_markdown(title, authors, clippings, cover_path)
+
         try:
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(markdown_content)
-            print(f"Successfully created: {filename}")
+            print(f"Successfully created/updated: {filename}")
         except Exception as e:
             print(f"Error writing file {filename}: {e}")

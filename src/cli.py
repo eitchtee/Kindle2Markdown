@@ -29,6 +29,11 @@ def main():
         action="store_true",
         help="Remove duplicate highlights, keeping only the most recent one.",
     )
+    arg_parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="Overwrite existing files and covers.",
+    )
 
     args = arg_parser.parse_args()
 
@@ -87,7 +92,7 @@ def main():
         grouped_clippings[book_key].append(clipping)
 
     # Write the markdown files
-    writer.write_markdown_files(grouped_clippings, args.output)
+    writer.write_markdown_files(grouped_clippings, args.output, rebuild=args.rebuild)
 
     print(
         f"\nSuccessfully processed {len(clippings)} clippings into {len(grouped_clippings)} books."
