@@ -4,6 +4,7 @@ from collections import defaultdict
 from . import parser
 from . import writer
 
+
 def main():
     """
     The main function of the application.
@@ -30,7 +31,7 @@ def main():
     print(f"Output directory: {args.output}")
 
     try:
-        with open(args.input, 'r', encoding='utf-8-sig') as f:
+        with open(args.input, "r", encoding="utf-8-sig") as f:
             content = f.read()
     except FileNotFoundError:
         print(f"Error: Input file not found at {args.input}")
@@ -48,14 +49,17 @@ def main():
     # Group clippings by book
     grouped_clippings = defaultdict(list)
     for clipping in clippings:
-        book_key = (clipping['book_title'], clipping['author'])
+        book_key = (clipping["book_title"], tuple(clipping["author"]))
         grouped_clippings[book_key].append(clipping)
 
     # Write the markdown files
     writer.write_markdown_files(grouped_clippings, args.output)
 
-    print(f"\nSuccessfully processed {len(clippings)} clippings into {len(grouped_clippings)} books.")
+    print(
+        f"\nSuccessfully processed {len(clippings)} clippings into {len(grouped_clippings)} books."
+    )
     print("Done!")
+
 
 if __name__ == "__main__":
     main()
