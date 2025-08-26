@@ -2,7 +2,7 @@
 
 A simple CLI tool to convert your Kindle "My Clippings.txt" file into a set of organized markdown files, one for each book.
 
-This tool is designed to work with clippings in Portuguese, but it can be adapted for other languages (issues and pull requests for other languages are welcome. Share your My Clippings file). It automatically fetches book covers, deduplicates highlights, and generates clean markdown files ready for use in note-taking apps like [Obsidian](https://obsidian.md/).
+**This tool is designed to work with clippings in Portuguese**, but it can be adapted for other languages (issues and pull requests for other languages are welcome. Share your My Clippings file). It automatically fetches book covers, deduplicates highlights, and generates clean markdown files ready for use in note-taking apps like [Obsidian](https://obsidian.md/).
 
 ## Features
 
