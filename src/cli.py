@@ -24,6 +24,11 @@ def main():
         required=True,
         help="Path to the output directory for the markdown files.",
     )
+    arg_parser.add_argument(
+        "--deduplicate",
+        action="store_true",
+        help="Remove duplicate highlights, keeping only the most recent one.",
+    )
 
     args = arg_parser.parse_args()
 
@@ -45,6 +50,35 @@ def main():
     if not clippings:
         print("No clippings found in the input file.")
         return
+
+    if args.deduplicate:
+        print("Deduplicating highlights...")
+        unique_clippings = {}
+        clippings_without_position = []
+
+        for clipping in clippings:
+            position = clipping.get("position")
+            if not position:
+                clippings_without_position.append(clipping)
+                continue
+
+            start_pos = position.split("-")[0]
+            book_key = (clipping["book_title"], tuple(clipping["author"]))
+            dedup_key = (book_key, start_pos)
+
+            if dedup_key not in unique_clippings:
+                unique_clippings[dedup_key] = clipping
+            else:
+                existing_date = unique_clippings[dedup_key].get("date")
+                current_date = clipping.get("date")
+
+                if current_date and (not existing_date or current_date > existing_date):
+                    unique_clippings[dedup_key] = clipping
+
+        original_count = len(clippings)
+        clippings = list(unique_clippings.values()) + clippings_without_position
+        new_count = len(clippings)
+        print(f"Removed {original_count - new_count} duplicate highlights.")
 
     # Group clippings by book
     grouped_clippings = defaultdict(list)

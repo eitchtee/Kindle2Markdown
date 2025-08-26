@@ -198,11 +198,14 @@ Last clipping: {last_clipping_date_str}
     for clipping in clippings:
         quote_title_parts = []
         if clipping.get("page"):
-            quote_title_parts.append(f"Page {clipping['page']}")
-        if clipping.get("position"):
-            quote_title_parts.append(f"({clipping['position']})")
+            quote_title_parts.append(f"📄 {clipping['page']}")
+            if clipping.get("position"):
+                quote_title_parts.append(f"({clipping['position']})")
+        else:
+            if clipping.get("position"):
+                quote_title_parts.append(f"📑 {clipping['position']}")
         if clipping.get("date"):
-            quote_title_parts.append(f"@ {clipping['date'].strftime('%Y-%m-%d %H:%M')}")
+            quote_title_parts.append(f"@ {clipping['date'].strftime('%d/%m/%Y %H:%M')}")
 
         quote_title = " ".join(quote_title_parts)
         highlight_lines = clipping["highlight"].split("\n")
