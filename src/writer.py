@@ -5,6 +5,7 @@ import requests
 import urllib.parse
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
+from . import utils
 
 
 def sanitize_filename(filename: str) -> str:
@@ -167,6 +168,7 @@ def get_metadata(
 
 
 def generate_book_markdown(
+    book_id: str,
     title: str,
     authors: List[str],
     clippings: List[Dict],
@@ -188,6 +190,7 @@ def generate_book_markdown(
         author_field = 'Author: ""'
 
     header = f"""---
+ID: "{book_id}"
 Cover: "{cover_path}"
 Book: "{title}"
 {author_field}
@@ -232,13 +235,32 @@ def write_markdown_files(
     if not os.path.exists(covers_dir):
         os.makedirs(covers_dir)
 
+    id_to_filepath = {}
+    if not rebuild:
+        for filename in os.listdir(output_dir):
+            if not filename.endswith(".md"):
+                continue
+
+            filepath = os.path.join(output_dir, filename)
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    # Read only the beginning of the file for performance
+                    content = f.read(1024)
+                match = re.search(r"^ID: \s*\"?([^\r\n\"]+)\"?", content, re.MULTILINE)
+                if match:
+                    book_id = match.group(1)
+                    if book_id not in id_to_filepath:
+                        id_to_filepath[book_id] = filepath
+            except (IOError, ValueError) as e:
+                print(e)
+                continue
+
     for (title, author_tuple), clippings in grouped_clippings.items():
         authors = list(author_tuple)
-        authors_str = "; ".join(authors)
-        filename = sanitize_filename(f"{title} - {authors_str}.md")
-        filepath = os.path.join(output_dir, filename)
+        book_id = utils.generate_book_id(title, authors)
+        filepath = id_to_filepath.get(book_id)
 
-        if not rebuild and os.path.exists(filepath):
+        if filepath and os.path.exists(filepath):
             try:
                 with open(filepath, "r", encoding="utf-8") as f:
                     existing_content = f.read()
@@ -247,23 +269,27 @@ def write_markdown_files(
                 if match:
                     existing_clippings_count = int(match.group(1))
                     if existing_clippings_count == len(clippings):
-                        print(f"Skipping up-to-date file: {filename}")
+                        print(f"Skipping up-to-date file: {os.path.basename(filepath)}")
                         continue
             except (IOError, ValueError) as e:
                 print(
-                    f"Could not check existing file {filename}, will overwrite. Error: {e}"
+                    f"Could not check existing file {os.path.basename(filepath)}, will overwrite. Error: {e}"
                 )
+        else:
+            authors_str = "; ".join(authors)
+            filename = sanitize_filename(f"{title} - {authors_str}.md")
+            filepath = os.path.join(output_dir, filename)
 
         _, authors, cover_path = get_metadata(
             title, authors, output_dir, rebuild=rebuild
         )
         markdown_content = generate_book_markdown(
-            title, authors, clippings, cover_path, date_format
+            book_id, title, authors, clippings, cover_path, date_format
         )
 
         try:
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(markdown_content)
-            print(f"Successfully created/updated: {filename}")
+            print(f"Successfully created/updated: {os.path.basename(filepath)}")
         except Exception as e:
-            print(f"Error writing file {filename}: {e}")
+            print(f"Error writing file {os.path.basename(filepath)}: {e}")
